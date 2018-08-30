@@ -7,11 +7,17 @@ import (
 	"os"
 	"math"
 	"image/color"
+	"sync"
 )
+
+type DB struct {
+	mutex *sync.Mutex
+	store map[string][3]float64
+}
 
 func resize(img image.Image, newWidth int) *image.NRGBA {
 	bounds := img.Bounds()
-	width := bounds.Max.X - bounds.Min.X
+	width := bounds.Dx()
 	ratio := width / newWidth
 	output := image.NewNRGBA(image.Rect(bounds.Min.X / ratio, bounds.Min.Y / ratio, bounds.Max.X / ratio, bounds.Max.Y / ratio))
 
@@ -38,12 +44,17 @@ func averageColor(img image.Image) [3]float64 {
 	return [3]float64{r / totalPixels, g / totalPixels, b / totalPixels}
 }
 
-func cloneTilesDB() map[string][3]float64 {
+func cloneTilesDB() *DB {
 	db := make(map[string][3]float64)
 	for k, v := range TILESDB {
 		db[k] = v
 	}
-	return db
+
+	tiles := &DB{
+		store: db,
+		mutex: &sync.Mutex{},
+	}
+	return tiles
 }
 
 func tilesDB() map[string][3]float64 {
@@ -70,10 +81,12 @@ func tilesDB() map[string][3]float64 {
 	return db
 }
 
-func getNearestTile(target [3]float64, tilesDB map[string][3]float64) string {
+func (db *DB) getNearestTile(target [3]float64) string {
 	var filename string
 	smallest := 1e9
-	for k, v := range tilesDB {
+
+	db.mutex.Lock()
+	for k, v := range db.store {
 		distance := distance(target, v)
 		if distance < smallest {
 			filename = k
@@ -81,6 +94,7 @@ func getNearestTile(target [3]float64, tilesDB map[string][3]float64) string {
 		}
 	}
 	//delete(tilesDB, filename)
+	db.mutex.Unlock()
 	return filename
 }
 
